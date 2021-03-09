@@ -2,10 +2,12 @@ package localcache
 
 import (
 	"testing"
+	"time"
 )
 
 func TestGet(t *testing.T) {
 	c := NewLocalCache()
+	defer c.Stop()
 	_, has := c.Get("123")
 	if has {
 		t.Error("TestGet1 not exists")
@@ -15,10 +17,17 @@ func TestGet(t *testing.T) {
 	if !has {
 		t.Error("TestGet2 not exists")
 	}
+	c.SetWithExpire("123", 2, 0)
+	time.Sleep(1 * time.Second)
+	_, has = c.Get("123")
+	if has {
+		t.Error("TestGet3 not exists")
+	}
 }
 
 func TestDel(t *testing.T) {
 	c := NewLocalCache()
+	defer c.Stop()
 	has := c.Del("123")
 	if has {
 		t.Error("TestDel1 not exists")
@@ -32,6 +41,7 @@ func TestDel(t *testing.T) {
 
 func TestLen(t *testing.T) {
 	c := NewLocalCache()
+	defer c.Stop()
 	l := c.Len()
 	if l != 0 {
 		t.Error("TestLen1 <> 0")
@@ -45,6 +55,7 @@ func TestLen(t *testing.T) {
 
 func TestFlush(t *testing.T) {
 	c := NewLocalCache()
+	defer c.Stop()
 	c.Set("123", 1)
 	l := c.Len()
 	if l != 1 {
