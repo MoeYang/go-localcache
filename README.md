@@ -1,7 +1,10 @@
-# go-localcache
+# what is go-localcache ?
 A mem cache library by golang.
 
-Support to set TTL for every key and LRU policy to delete useless keys. 
+## why choose go-localcache ?
+1、Support to set TTL for every key 
+2、LRU policy to delete useless keys
+3、Similar performance like sync.Map
 
 
 # How to use
