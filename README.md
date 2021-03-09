@@ -14,23 +14,23 @@ Support to set TTL for every key and LRU policy to delete useless keys.
 	)
 	
 	// Get a key and return the value and if the key exists
-	Get(key string) (interface{}, bool)
+	cache.Get(key string) (interface{}, bool)
 	
 	// Set a key-value with default seconds to live
-	Set(key string, value interface{})
+	cache.Set(key string, value interface{})
 	
 	// SetWithExpire set a key-value with seconds to live
-	SetWithExpire(key string, value interface{}, ttl int64)
+	cache.SetWithExpire(key string, value interface{}, ttl int64)
 	
 	// Del delete key and return if the key exists
-	Del(key string) bool
+	cache.Del(key string) bool
 	
 	// Len return count of keys in cache
-	Len() int
+	cache.Len() int
 	
 	// Flush clear all keys in chache, should do this when set and del is stop
-	Flush()
+	cache.Flush()
 	
 	// Stop the cacheProcess by close stopChan
-	Stop()
+	cache.Stop()
 ```
