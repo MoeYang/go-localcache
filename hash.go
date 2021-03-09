@@ -8,7 +8,7 @@ const (
 )
 
 // Sum64 gets the string and returns its uint64 hash value. use fnv-1a
-func Sum64(key string) uint64 {
+func sum64(key string) uint64 {
 	var hash uint64 = offset64
 	for i := 0; i < len(key); i++ {
 		hash ^= uint64(key[i])
