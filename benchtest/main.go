@@ -16,12 +16,12 @@ const (
 	vPre      = "v"
 	kPre      = "1234567890k"
 	keys      = 1000000
-	readTimes = 100
+	readTimes = 50
 )
 
 func main() {
-	test1()
-	test2()
+	testLocalCache()
+	testSyncMap()
 }
 
 var ss debug.GCStats
@@ -38,31 +38,45 @@ func gcPauseX(caller string) {
 	log.Printf(" %s Pause:%d %d\n", caller, ss1.PauseTotal-ss.PauseTotal, ss1.NumGC-ss.NumGC)
 }
 
-func test1() {
-	cache := localcache.NewLocalCache(localcache.WithCapacity(keys))
+func testLocalCache() {
+	cache := localcache.NewLocalCache(
+		localcache.WithCapacity(keys),
+		localcache.WithShardCount(256),
+		localcache.WithPolicy(localcache.PolicyTypeLRU),
+		localcache.WithGlobalTTL(120),
+	)
 	{
 		startT := time.Now() //计算当前时间
 		for i := 0; i < keys; i++ {
-			cache.Set(fmt.Sprintf("%s%010d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+			cache.Set(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
 		}
 		fmt.Printf("write local cost = %v\n", time.Since(startT))
 	}
 	//读性能测试
 	startT := time.Now() //计算当前时间
 	var wg sync.WaitGroup
-	wg.Add(readTimes)
+	wg.Add(readTimes + 1)
 	for i := 0; i < readTimes; i++ {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < keys; j++ {
-				v, err := cache.Get(fmt.Sprintf("%s%010d", kPre, j))
-				if v == nil || err {
-					fmt.Sprintf("%d", 1)
+				v, has := cache.Get(fmt.Sprintf("%s%d", kPre, j))
+				if v == nil || !has {
+					fmt.Println(j)
 				}
 			}
 
 		}()
 	}
+	go func() {
+		defer wg.Done()
+		for i := 0; i < keys; i++ {
+			cache.Set(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+		}
+		for i := 0; i < keys; i++ {
+			cache.Set(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+		}
+	}()
 	wg.Wait()
 	fmt.Printf("read local cost = %v\n", time.Since(startT))
 	gcPause("localcache")
@@ -75,31 +89,40 @@ func test1() {
 		fmt.Printf("delete local cost = %v\n", time.Since(startT1))
 	}
 }
-func test2() {
+func testSyncMap() {
 	var cache sync.Map
 	{
 		startT := time.Now() //计算当前时间
 		for i := 0; i < keys; i++ {
-			cache.Store(fmt.Sprintf("%s%010d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+			cache.Store(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
 		}
 		fmt.Printf("write sync.Map cost = %v\n", time.Since(startT))
 	}
 	//读性能测试
 	startT := time.Now() //计算当前时间
 	var wg sync.WaitGroup
-	wg.Add(readTimes)
+	wg.Add(readTimes + 1)
 	for i := 0; i < readTimes; i++ {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < keys; j++ {
-				v, err := cache.Load(fmt.Sprintf("keyprefix%010d", i, j))
-				if v == nil || !err {
-					fmt.Sprintf("%d", 1)
+				v, has := cache.Load(fmt.Sprintf("%s%d", kPre, j))
+				if v == nil || !has {
+					fmt.Println(j)
 				}
 			}
 
 		}()
 	}
+	go func() {
+		defer wg.Done()
+		for i := 0; i < keys; i++ {
+			cache.Store(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+		}
+		for i := 0; i < keys; i++ {
+			cache.Store(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+		}
+	}()
 	wg.Wait()
 	fmt.Printf("read sync.Map cost = %v\n", time.Since(startT))
 

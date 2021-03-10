@@ -10,7 +10,11 @@ const (
 	defaultTTL      = 60  // default key expire time 60 sec
 	defaultCap      = 1024
 
-	hitChanLen = 1 << 15
+	hitChanLen = 1 << 15 // 32768
+	addChanLen = 1 << 15
+
+	opTypeDel = uint8(1)
+	opTypeAdd = uint8(2)
 )
 
 type Cache interface {
@@ -40,6 +44,7 @@ type localCache struct {
 	ttl        int64 // Global Keys expire seconds
 
 	hitChan  chan interface{} // chan while get a key should put in
+	opChan   chan opMsg       // add del and add msg in one chan, so we can do options order by time acs
 	stopChan chan struct{}    // chan stop signal
 }
 
@@ -51,6 +56,7 @@ func NewLocalCache(options ...Option) Cache {
 		cap:       defaultCap,
 		ttl:       defaultTTL,
 		hitChan:   make(chan interface{}, hitChanLen),
+		opChan:    make(chan opMsg, addChanLen),
 	}
 	// set options
 	for _, opt := range options {
@@ -115,14 +121,16 @@ func (l *localCache) Get(key string) (interface{}, bool) {
 	if has {
 		element := l.policy.unpack(obj)
 		element.lock.RLock()
-		defer element.lock.RUnlock()
-		if element.isExpire() {
+		isExpire := element.isExpire()
+		value := element.value
+		element.lock.RUnlock()
+		if isExpire {
 			// add hit count, if chan full, skip this signal is ok
 			select {
 			case l.hitChan <- obj:
 			default:
 			}
-			return element.value, true
+			return value, true
 		} else {
 			// out of ttl, need del
 			l.Del(key)
@@ -157,8 +165,9 @@ func (l *localCache) SetWithExpire(key string, value interface{}, ttl int64) {
 			expireTime: time.Now().Add(time.Duration(ttl) * time.Second).Unix(),
 		}
 		// add new key
-		obj := l.policy.add(element)
+		obj = l.policy.pack(element)
 		l.shards[idx].set(key, obj)
+		l.opChan <- opMsg{opType: opTypeAdd, policyObj: obj}
 	}
 }
 
@@ -168,8 +177,8 @@ func (l *localCache) Del(key string) bool {
 	obj, has := l.shards[idx].get(key)
 	if has {
 		// need del
-		l.policy.del(obj)
 		l.shards[idx].del(key)
+		l.opChan <- opMsg{opType: opTypeDel, policyObj: obj}
 		return true
 	}
 	return false
@@ -192,6 +201,7 @@ func (l *localCache) Flush() {
 	l.Stop()
 
 	l.hitChan = make(chan interface{}, hitChanLen)
+	l.opChan = make(chan opMsg, addChanLen)
 	l.policy.flush()
 
 	l.start()
@@ -209,21 +219,22 @@ func (l *localCache) start() {
 }
 
 // cacheProcess run a loop to deal chan signals
+//  use a single goroutine to make policy ops safe.
 func (l *localCache) cacheProcess() {
 	for {
 		select {
 		case obj := <-l.hitChan:
 			l.policy.hit(obj)
+		case opMsg := <-l.opChan:
+			if opMsg.opType == opTypeAdd {
+				l.policy.add(opMsg.policyObj)
+			} else if opMsg.opType == opTypeDel {
+				l.policy.del(opMsg.policyObj)
+			}
 		case <-l.stopChan:
 			return
 		}
 	}
-
-}
-
-// getShardIndex getShardIndex by hash code of key
-func (l *localCache) getShardIndex(n uint64) uint64 {
-	return n & l.shardMask
 }
 
 // element is what factly save in []shard
@@ -237,4 +248,15 @@ type element struct {
 // isExpire return whether element in ttl
 func (e *element) isExpire() bool {
 	return time.Now().Unix() <= e.expireTime
+}
+
+// opMsg is a msg send to opChan when add or del a key
+type opMsg struct {
+	opType    uint8       // type: add || del
+	policyObj interface{} // object which save in shard
+}
+
+// getShardIndex getShardIndex by hash code of key
+func (l *localCache) getShardIndex(n uint64) uint64 {
+	return n & l.shardMask
 }
