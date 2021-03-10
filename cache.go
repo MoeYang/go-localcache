@@ -32,6 +32,8 @@ type Cache interface {
 	Flush()
 	// Stop the cacheProcess by close stopChan
 	Stop()
+	// Statics return cache Statics {"hit":1, "miss":1, "hitRate":50.0}
+	Statics() map[string]interface{}
 }
 
 type localCache struct {
@@ -46,6 +48,8 @@ type localCache struct {
 	hitChan  chan interface{} // chan while get a key should put in
 	opChan   chan opMsg       // add del and add msg in one chan, so we can do options order by time acs
 	stopChan chan struct{}    // chan stop signal
+
+	statist statist
 }
 
 // NewLocalCache return Cache obj with options
@@ -57,6 +61,7 @@ func NewLocalCache(options ...Option) Cache {
 		ttl:       defaultTTL,
 		hitChan:   make(chan interface{}, hitChanLen),
 		opChan:    make(chan opMsg, addChanLen),
+		statist:   newstatisCaculator(false),
 	}
 	// set options
 	for _, opt := range options {
@@ -115,6 +120,14 @@ func WithPolicy(policyType string) Option {
 	}
 }
 
+// WithStatist set whether need to caculate the cache stastic,
+//  not need may led performance a very little better ^-^
+func WithStatist(needSatstic bool) Option {
+	return func(c *localCache) {
+		c.statist = newstatisCaculator(needSatstic)
+	}
+}
+
 func (l *localCache) Get(key string) (interface{}, bool) {
 	idx := l.getShardIndex(sum64(key))
 	obj, has := l.shards[idx].get(key)
@@ -130,12 +143,14 @@ func (l *localCache) Get(key string) (interface{}, bool) {
 			case l.hitChan <- obj:
 			default:
 			}
+			l.statist.hitIncr()
 			return value, true
 		} else {
 			// out of ttl, need del
 			l.Del(key)
 		}
 	}
+	l.statist.missIncr()
 	return nil, false
 }
 
@@ -210,6 +225,14 @@ func (l *localCache) Flush() {
 // Stop the cacheProcess by close stopChan
 func (l *localCache) Stop() {
 	close(l.stopChan)
+}
+
+func (l *localCache) Statics() map[string]interface{} {
+	return map[string]interface{}{
+		"hit":     l.statist.GetHitCount(),
+		"miss":    l.statist.GetMissCount(),
+		"hitRate": l.statist.GetHitRate(),
+	}
 }
 
 // start cacheProcess

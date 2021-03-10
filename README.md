@@ -38,4 +38,7 @@ A mem cache library by golang.
 	
 	// Stop the cacheProcess by close stopChan
 	cache.Stop()
+
+	// Statics return cache Statics {"hit":1, "miss":1, "hitRate":50.0}
+	Statics() map[string]interface{}
 ```

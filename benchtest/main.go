@@ -44,6 +44,7 @@ func testLocalCache() {
 		localcache.WithShardCount(256),
 		localcache.WithPolicy(localcache.PolicyTypeLRU),
 		localcache.WithGlobalTTL(120),
+		localcache.WithStatist(true),
 	)
 	{
 		startT := time.Now() //计算当前时间
@@ -88,6 +89,7 @@ func testLocalCache() {
 		}
 		fmt.Printf("delete local cost = %v\n", time.Since(startT1))
 	}
+	fmt.Println(cache.Statics())
 }
 func testSyncMap() {
 	var cache sync.Map
