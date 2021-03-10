@@ -15,7 +15,7 @@ A mem cache library by golang.
 		localcache.WithCapacity(1024), // WithShardCount set max Capacity
 		localcache.WithShardCount(256),// WithShardCount shardCnt must be a power of 2
 		localcache.WithGlobalTTL(120), // WithGlobalTTL set all keys default expire time of seconds
-		localcache.WithStatist(true)   // WithStatist set whether need to caculate the cache stastic
+		localcache.WithStatist(true),  // WithStatist set whether need to caculate the cache stastic
 		localcache.WithPolicy(localcache.PolicyTypeLRU), // WithPolicy set the elimination policy of key
 	)
 	
