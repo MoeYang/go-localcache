@@ -89,7 +89,7 @@ func testLocalCache() {
 		}
 		fmt.Printf("delete local cost = %v\n", time.Since(startT1))
 	}
-	fmt.Println(cache.Statics())
+	fmt.Println(cache.Statistic())
 }
 func testSyncMap() {
 	var cache sync.Map

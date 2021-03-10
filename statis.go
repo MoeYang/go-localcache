@@ -14,25 +14,25 @@ type statist interface {
 
 // statisCaculator implement a cache statist
 type statisCaculator struct {
-	needStastic bool
+	needStatist bool
 	hitCount    uint64
 	missCount   uint64
 }
 
-// newstatisCaculator needs a param whether need to do cache statist
-func newstatisCaculator(needStastic bool) statist {
-	return &statisCaculator{needStastic: needStastic}
+// newstatisCaculator needs a param whether need to do cache statis
+func newstatisCaculator(needStatist bool) statist {
+	return &statisCaculator{needStatist: needStatist}
 }
 
 func (s *statisCaculator) hitIncr() {
-	if !s.needStastic {
+	if !s.needStatist {
 		return
 	}
 	atomic.AddUint64(&s.hitCount, 1)
 }
 
 func (s *statisCaculator) missIncr() {
-	if !s.needStastic {
+	if !s.needStatist {
 		return
 	}
 	atomic.AddUint64(&s.missCount, 1)

@@ -32,8 +32,8 @@ type Cache interface {
 	Flush()
 	// Stop the cacheProcess by close stopChan
 	Stop()
-	// Statics return cache Statics {"hit":1, "miss":1, "hitRate":50.0}
-	Statics() map[string]interface{}
+	// Statistic return cache Statistic {"hit":1, "miss":1, "hitRate":50.0}
+	Statistic() map[string]interface{}
 }
 
 type localCache struct {
@@ -120,11 +120,11 @@ func WithPolicy(policyType string) Option {
 	}
 }
 
-// WithStatist set whether need to caculate the cache stastic,
+// WithStatist set whether need to caculate the cache`s statist,
 //  not need may led performance a very little better ^-^
-func WithStatist(needSatstic bool) Option {
+func WithStatist(needStatistic bool) Option {
 	return func(c *localCache) {
-		c.statist = newstatisCaculator(needSatstic)
+		c.statist = newstatisCaculator(needStatistic)
 	}
 }
 
@@ -227,7 +227,7 @@ func (l *localCache) Stop() {
 	close(l.stopChan)
 }
 
-func (l *localCache) Statics() map[string]interface{} {
+func (l *localCache) Statistic() map[string]interface{} {
 	return map[string]interface{}{
 		"hit":     l.statist.GetHitCount(),
 		"miss":    l.statist.GetMissCount(),
