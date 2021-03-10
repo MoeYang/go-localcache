@@ -1,7 +1,7 @@
 package localcache
 
 import (
-	"container/list"
+	"github.com/MoeYang/go-localcache/container/list"
 )
 
 type policyLRU struct {
@@ -18,16 +18,20 @@ func newPolicyLRU(cap int, cache Cache) policy {
 	}
 }
 
-func (p *policyLRU) add(ele *element) interface{} {
-	obj := p.list.PushFront(ele)
-	// need to del when list is full( ele is already in list, so this should use > )
-	if p.list.Len() > p.cap {
+func (p *policyLRU) add(obj interface{}) {
+	ele, ok := obj.(*list.Element)
+	if !ok {
+		return
+	}
+	// need to del when list is full
+	if p.list.Len() >= p.cap {
 		lastEle := p.list.Back()
 		if lastEle != nil {
 			p.cache.Del(lastEle.Value.(*element).key)
 		}
 	}
-	return obj
+	// push ele to first of list
+	p.list.PushElementFront(ele)
 }
 
 func (p *policyLRU) hit(obj interface{}) {
@@ -57,4 +61,8 @@ func (p *policyLRU) unpack(obj interface{}) *element {
 		return nil
 	}
 	return ele.Value.(*element)
+}
+
+func (p *policyLRU) pack(ele *element) interface{} {
+	return p.list.NewElement(ele)
 }

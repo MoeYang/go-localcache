@@ -7,8 +7,8 @@ const (
 
 // policy of del useless element
 type policy interface {
-	// add an element, return packed interface to save
-	add(e *element) interface{}
+	// add an element
+	add(interface{})
 	// hit a key of element
 	hit(interface{})
 	// del a key
@@ -17,6 +17,8 @@ type policy interface {
 	flush()
 	// unpack interface to element
 	unpack(interface{}) *element
+	// pack element to interface
+	pack(*element) interface{}
 }
 
 // newPolicy return policy implement by type const

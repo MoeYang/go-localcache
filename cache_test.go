@@ -19,9 +19,9 @@ func TestGet(t *testing.T) {
 	}
 	c.SetWithExpire("123", 2, 0)
 	time.Sleep(1 * time.Second)
-	_, has = c.Get("123")
+	obj, has := c.Get("123")
 	if has {
-		t.Error("TestGet3 not exists")
+		t.Errorf("TestGet3 not exists %+v", obj)
 	}
 }
 
