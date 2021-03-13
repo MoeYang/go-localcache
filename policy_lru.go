@@ -1,7 +1,7 @@
 package localcache
 
 import (
-	"github.com/MoeYang/go-localcache/container/list"
+	"github.com/MoeYang/go-localcache/datastruct/list"
 )
 
 type policyLRU struct {
