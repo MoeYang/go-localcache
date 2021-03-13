@@ -16,7 +16,7 @@ const (
 	vPre      = "v"
 	kPre      = "1234567890k"
 	keys      = 1000000
-	readTimes = 50
+	readTimes = 100
 )
 
 func main() {
@@ -41,11 +41,12 @@ func gcPauseX(caller string) {
 func testLocalCache() {
 	cache := localcache.NewLocalCache(
 		localcache.WithCapacity(keys),
-		localcache.WithShardCount(256),
+		localcache.WithShardCount(128),
 		localcache.WithPolicy(localcache.PolicyTypeLRU),
 		localcache.WithGlobalTTL(120),
 		localcache.WithStatist(true),
 	)
+	defer cache.Stop()
 	{
 		startT := time.Now() //计算当前时间
 		for i := 0; i < keys; i++ {
@@ -56,14 +57,14 @@ func testLocalCache() {
 	//读性能测试
 	startT := time.Now() //计算当前时间
 	var wg sync.WaitGroup
-	wg.Add(readTimes + 1)
+	wg.Add(readTimes + 2)
 	for i := 0; i < readTimes; i++ {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < keys; j++ {
 				v, has := cache.Get(fmt.Sprintf("%s%d", kPre, j))
 				if v == nil || !has {
-					fmt.Println(j)
+					//fmt.Println(j)
 				}
 			}
 
@@ -72,10 +73,13 @@ func testLocalCache() {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < keys; i++ {
-			cache.Set(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+			cache.Set(fmt.Sprintf("%s%d", kPre, i), []byte(strconv.Itoa(i)))
 		}
+	}()
+	go func() {
+		defer wg.Done()
 		for i := 0; i < keys; i++ {
-			cache.Set(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+			cache.Del(fmt.Sprintf("%s%d", kPre, i))
 		}
 	}()
 	wg.Wait()
@@ -90,6 +94,7 @@ func testLocalCache() {
 		fmt.Printf("delete local cost = %v\n", time.Since(startT1))
 	}
 	fmt.Println(cache.Statistic())
+	fmt.Println(cache.Len())
 }
 func testSyncMap() {
 	var cache sync.Map
@@ -103,14 +108,14 @@ func testSyncMap() {
 	//读性能测试
 	startT := time.Now() //计算当前时间
 	var wg sync.WaitGroup
-	wg.Add(readTimes + 1)
+	wg.Add(readTimes + 2)
 	for i := 0; i < readTimes; i++ {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < keys; j++ {
 				v, has := cache.Load(fmt.Sprintf("%s%d", kPre, j))
 				if v == nil || !has {
-					fmt.Println(j)
+					//fmt.Println(j)
 				}
 			}
 
@@ -119,10 +124,13 @@ func testSyncMap() {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < keys; i++ {
-			cache.Store(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+			cache.Store(fmt.Sprintf("%s%d", kPre, i), []byte(strconv.Itoa(i)))
 		}
+	}()
+	go func() {
+		defer wg.Done()
 		for i := 0; i < keys; i++ {
-			cache.Store(fmt.Sprintf("%s%d", kPre, i), []byte(vPre+strconv.Itoa(i)))
+			cache.Delete(fmt.Sprintf("%s%d", kPre, i))
 		}
 	}()
 	wg.Wait()

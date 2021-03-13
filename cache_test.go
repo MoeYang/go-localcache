@@ -17,11 +17,16 @@ func TestGet(t *testing.T) {
 	if !has {
 		t.Error("TestGet2 not exists")
 	}
+	c.Set("123", 3)
+	obj, _ := c.Get("123")
+	if obj.(int) != 3 {
+		t.Errorf("TestGet3 get <> 3 %+v", obj)
+	}
 	c.SetWithExpire("123", 2, 0)
 	time.Sleep(1 * time.Second)
-	obj, has := c.Get("123")
+	obj, has = c.Get("123")
 	if has {
-		t.Errorf("TestGet3 not exists %+v", obj)
+		t.Errorf("TestGet4 not exists %+v", obj)
 	}
 }
 

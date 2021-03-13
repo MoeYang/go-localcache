@@ -1,4 +1,4 @@
-//Package list copy from container.list
+//Package list copy from datastruct.list
 // what is more:
 // 1、add a func NewElement() to support get a single Element whithout set prev and next and list
 // 2、add a func PushElementFront() to insert the single element to first of the list which created by call NewElement()

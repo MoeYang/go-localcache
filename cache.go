@@ -3,15 +3,25 @@ package localcache
 import (
 	"sync"
 	"time"
+
+	"github.com/MoeYang/go-localcache/datastruct/dict"
+	"github.com/MoeYang/go-localcache/datastruct/lock"
 )
 
 const (
 	defaultShardCnt = 256 // ShardCnt must be a power of 2
-	defaultTTL      = 60  // default key expire time 60 sec
 	defaultCap      = 1024
+
+	defaultTTL             = 60  // default key expire time 60 sec
+	defaultTTLTick         = 100 // default time.tick 100ms
+	defaultTTLCheckCount   = 100 // every time check 100 keys
+	defaultTTLCheckPercent = 25  // every check expierd key > 25, check another time
+	defaultTTLCheckRunTime = 50  // max run time for a tick
 
 	hitChanLen = 1 << 15 // 32768
 	addChanLen = 1 << 15
+
+	defaultLockerCnt = 128 // lock shard count
 
 	opTypeDel = uint8(1)
 	opTypeAdd = uint8(2)
@@ -37,41 +47,49 @@ type Cache interface {
 }
 
 type localCache struct {
-	policy     policy // elimination policy of keys
+	// to make one key`s concurrent set and del safe by lock the key
+	locker *lock.Locker
+
+	// elimination policy of keys
+	policy     policy
 	policyType string
-	shards     []shard
-	shardCnt   int // shardings count
-	shardMask  uint64
-	cap        int   // capacity
-	ttl        int64 // Global Keys expire seconds
+
+	// data dict
+	dict     dict.Dict
+	shardCnt int // shardings count
+	cap      int // capacity
+
+	// ttl dict
+	ttlDict dict.Dict
+	ttl     int64 // Global Keys expire seconds
 
 	hitChan  chan interface{} // chan while get a key should put in
 	opChan   chan opMsg       // add del and add msg in one chan, so we can do options order by time acs
 	stopChan chan struct{}    // chan stop signal
 
+	// cache statist
 	statist statist
 }
 
 // NewLocalCache return Cache obj with options
 func NewLocalCache(options ...Option) Cache {
 	c := &localCache{
-		shardCnt:  defaultShardCnt,
-		shardMask: defaultShardCnt - 1,
-		cap:       defaultCap,
-		ttl:       defaultTTL,
-		hitChan:   make(chan interface{}, hitChanLen),
-		opChan:    make(chan opMsg, addChanLen),
-		statist:   newstatisCaculator(false),
+		shardCnt: defaultShardCnt,
+		cap:      defaultCap,
+		ttl:      defaultTTL,
+		hitChan:  make(chan interface{}, hitChanLen),
+		opChan:   make(chan opMsg, addChanLen),
+		statist:  newstatisCaculator(false),
+		locker:   lock.NewLocker(defaultLockerCnt),
 	}
 	// set options
 	for _, opt := range options {
 		opt(c)
 	}
-	// init shardings
-	c.shards = make([]shard, c.shardCnt)
-	for i := 0; i < c.shardCnt; i++ {
-		c.shards[i] = newShardMap()
-	}
+	// init dict
+	c.dict = dict.NewDict(c.shardCnt)
+	// init ttl dict
+	c.ttlDict = dict.NewDict(c.shardCnt)
 	// init policy
 	c.policy = newPolicy(c.policyType, c.cap, c)
 	// start goroutine
@@ -109,7 +127,6 @@ func WithShardCount(shardCnt int) Option {
 	}
 	return func(c *localCache) {
 		c.shardCnt = shardCnt
-		c.shardMask = uint64(shardCnt - 1)
 	}
 }
 
@@ -120,7 +137,7 @@ func WithPolicy(policyType string) Option {
 	}
 }
 
-// WithStatist set whether need to caculate the cache`s statist,
+// WithStatist set whether need to caculate the cache`s statist, default false.
 //  not need may led performance a very little better ^-^
 func WithStatist(needStatistic bool) Option {
 	return func(c *localCache) {
@@ -129,15 +146,14 @@ func WithStatist(needStatistic bool) Option {
 }
 
 func (l *localCache) Get(key string) (interface{}, bool) {
-	idx := l.getShardIndex(sum64(key))
-	obj, has := l.shards[idx].get(key)
+	obj, has := l.dict.Get(key)
 	if has {
 		element := l.policy.unpack(obj)
 		element.lock.RLock()
-		isExpire := element.isExpire()
 		value := element.value
+		isExpire := element.isExpire()
 		element.lock.RUnlock()
-		if isExpire {
+		if !isExpire {
 			// add hit count, if chan full, skip this signal is ok
 			select {
 			case l.hitChan <- obj:
@@ -146,10 +162,10 @@ func (l *localCache) Get(key string) (interface{}, bool) {
 			l.statist.hitIncr()
 			return value, true
 		} else {
-			// out of ttl, need del
 			l.Del(key)
 		}
 	}
+	// not exists or expired
 	l.statist.missIncr()
 	return nil, false
 }
@@ -159,15 +175,19 @@ func (l *localCache) Set(key string, value interface{}) {
 }
 
 func (l *localCache) SetWithExpire(key string, value interface{}, ttl int64) {
-	idx := l.getShardIndex(sum64(key))
-	obj, has := l.shards[idx].get(key)
+	l.locker.Lock(key)
+	defer l.locker.Unlock(key)
+	obj, has := l.dict.Get(key)
+	expireTime := time.Now().Add(time.Duration(ttl) * time.Second).Unix()
 	if has {
 		// update element info
 		element := l.policy.unpack(obj)
 		element.lock.Lock()
 		element.value = value
-		element.expireTime = time.Now().Add(time.Duration(ttl) * time.Second).Unix()
+		element.expireTime = expireTime
 		element.lock.Unlock()
+		// set ttl
+		l.ttlDict.Set(key, expireTime)
 		// add hit count, if chan full, skip this signal is ok
 		select {
 		case l.hitChan <- obj:
@@ -177,42 +197,42 @@ func (l *localCache) SetWithExpire(key string, value interface{}, ttl int64) {
 		element := &element{
 			key:        key,
 			value:      value,
-			expireTime: time.Now().Add(time.Duration(ttl) * time.Second).Unix(),
+			expireTime: expireTime,
 		}
 		// add new key
 		obj = l.policy.pack(element)
-		l.shards[idx].set(key, obj)
+		l.dict.Set(key, obj)
+		// set ttl
+		l.ttlDict.Set(key, expireTime)
+		// add policy
 		l.opChan <- opMsg{opType: opTypeAdd, policyObj: obj}
 	}
 }
 
 // Del delete key and return if the key exists
 func (l *localCache) Del(key string) bool {
-	idx := l.getShardIndex(sum64(key))
-	obj, has := l.shards[idx].get(key)
+	l.locker.Lock(key)
+	defer l.locker.Unlock(key)
+	obj, has := l.dict.Get(key)
 	if has {
 		// need del
-		l.shards[idx].del(key)
+		l.dict.Del(key)
+		// del ttl
+		l.ttlDict.Del(key)
+		// del policy
 		l.opChan <- opMsg{opType: opTypeDel, policyObj: obj}
-		return true
 	}
-	return false
+	return has
 }
 
 // Len return count of keys in cache
 func (l *localCache) Len() int {
-	var cnt int
-	for _, shard := range l.shards {
-		cnt += shard.len()
-	}
-	return cnt
+	return l.dict.Len()
 }
 
-// Flush clear all keys in chache
+// Flush clear all keys in cache
 func (l *localCache) Flush() {
-	for _, shard := range l.shards {
-		shard.flush()
-	}
+	l.dict.Flush()
 	l.Stop()
 
 	l.hitChan = make(chan interface{}, hitChanLen)
@@ -238,7 +258,10 @@ func (l *localCache) Statistic() map[string]interface{} {
 // start cacheProcess
 func (l *localCache) start() {
 	l.stopChan = make(chan struct{})
+	// deal chan signals
 	go l.cacheProcess()
+	//  delete the keys which are expired
+	go l.ttlProcess()
 }
 
 // cacheProcess run a loop to deal chan signals
@@ -260,26 +283,56 @@ func (l *localCache) cacheProcess() {
 	}
 }
 
-// element is what factly save in []shard
+// ttlProcess run a loop to delete the keys which are expired
+func (l *localCache) ttlProcess() {
+	t := time.NewTicker(defaultTTLTick * time.Millisecond)
+	for {
+		select {
+		case <-l.stopChan:
+			return
+		case <-t.C:
+			ti := time.Now()
+			var delCount = 100
+			// every 100ms, check rand 100 keys;
+			// if expired more than 25, check again; like redis.
+			// max run 50 ms.
+			for delCount > defaultTTLCheckPercent &&
+				time.Now().Sub(ti) < defaultTTLCheckRunTime*time.Millisecond {
+				delCount = 0
+				now := time.Now().Unix()
+				keys := l.dict.RandKeys(defaultTTLCheckCount)
+				for _, key := range keys {
+					v, has := l.ttlDict.Get(key)
+					if has {
+						// key expired, del it from dict & ttl dict
+						expireTime := v.(int64)
+						if now > expireTime {
+							l.Del(key)
+							delCount++
+						}
+					}
+				}
+			}
+			//fmt.Println(time.Now(), time.Now().Sub(ti), l.ttlDict.Len(), l.Len())
+		}
+	}
+}
+
+// element is what factly save in dict
 type element struct {
 	lock       sync.RWMutex // element should be multi-safe
-	key        string
+	key        string       // need key to del in policy when list is full
 	value      interface{}
 	expireTime int64
 }
 
-// isExpire return whether element in ttl
+// isExpire return whether key is dead
 func (e *element) isExpire() bool {
-	return time.Now().Unix() <= e.expireTime
+	return time.Now().Unix() > e.expireTime
 }
 
 // opMsg is a msg send to opChan when add or del a key
 type opMsg struct {
 	opType    uint8       // type: add || del
 	policyObj interface{} // object which save in shard
-}
-
-// getShardIndex getShardIndex by hash code of key
-func (l *localCache) getShardIndex(n uint64) uint64 {
-	return n & l.shardMask
 }
