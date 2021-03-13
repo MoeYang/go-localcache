@@ -17,10 +17,6 @@ type Dict interface {
 	Flush()
 }
 
-// ForEachCustom used for Dict.ForEach() to deal k-v in every shard
-//  while need to break, this fuch should return true
-type ForEachCustom func(k string, v interface{}) (needBreak bool)
-
 type concurrentMap struct {
 	shards     []*shard
 	shardCount uint32
@@ -131,21 +127,6 @@ func (m *shard) flush() {
 
 func (m *shard) len() int {
 	return len(m.store)
-}
-
-// foreach return true if custom func said need to break the loop
-func (m *shard) foreach(custom ForEachCustom) bool {
-	// need RLock the shard，to protect the write to shard
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	for k, v := range m.store {
-		needBreak := custom(k, v)
-
-		if needBreak {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *shard) randKey() string {
