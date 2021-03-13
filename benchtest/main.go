@@ -41,7 +41,7 @@ func gcPauseX(caller string) {
 func testLocalCache() {
 	cache := localcache.NewLocalCache(
 		localcache.WithCapacity(keys),
-		localcache.WithShardCount(128),
+		localcache.WithShardCount(256),
 		localcache.WithPolicy(localcache.PolicyTypeLRU),
 		localcache.WithGlobalTTL(120),
 		localcache.WithStatist(true),

@@ -286,6 +286,7 @@ func (l *localCache) cacheProcess() {
 // ttlProcess run a loop to delete the keys which are expired
 func (l *localCache) ttlProcess() {
 	t := time.NewTicker(defaultTTLTick * time.Millisecond)
+	defer t.Stop()
 	for {
 		select {
 		case <-l.stopChan:
