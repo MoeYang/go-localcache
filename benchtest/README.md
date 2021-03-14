@@ -1,18 +1,19 @@
 # bench_test
 
-We set keys with 1 goroutine, and get keys with 100 goroutines.
+1、write keys with 1 goroutine; 
+2、get keys with 100 goroutines while write keys with 1 goroutine and del keys with 1 goroutine;
 
 
      go-localcache bench
-	 write local cost = 1.355967273s
-	 read local cost = 15.260196832s
-	 2021/03/09 20:09:50  localcache Pause:59311 1
-	 delete local cost = 440.067947ms
+	 write local cost = 2.132928994s
+	 read\write\delete local cost = 11.856400333s
+	 2021/03/09 20:09:50  localcache Pause:87826 1
+	 delete local cost = 404.306562ms
 	 
 	 sync.Map bench
-     write sync.Map cost = 1.341951564s
-	 read sync.Map cost = 15.626010979s
-	 2021/03/09 20:10:08  sync.Map Pause:59965 1
-	 del sync.Map cost = 279.28925ms
+     	 write sync.Map cost = 1.263461937s
+	 read\write\delete sync.Map cost = 9.6866624s
+	 2021/03/09 20:10:08  sync.Map Pause:111403 1
+	 del sync.Map cost = 325.917375ms
 
 
