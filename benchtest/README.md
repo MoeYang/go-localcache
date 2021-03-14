@@ -4,16 +4,25 @@
 2、get keys with 100 goroutines while write keys with 1 goroutine and del keys with 1 goroutine;
 
 
-     go-localcache bench
-	 write local cost = 2.132928994s
-	 read\write\delete local cost = 11.856400333s
-	 2021/03/09 20:09:50  localcache Pause:87826 1
-	 delete local cost = 404.306562ms
+# localcache
+```
+write local cost = 1.425530094s
+read local cost = 10.496183401s
+2021/03/14 22:19:26  localcache Pause:93065 1
+delete local cost = 534.445934ms
+map[hit:100000000 hitRate:100 miss:0]
+```
+
+# sync.map
+```
+write sync.Map cost = 1.281531642s
+read sync.Map cost = 9.296012626s
+2021/03/14 22:19:37  sync.Map Pause:109340 1
+del sync.Map cost = 324.273299ms
+```
 	 
-	 sync.Map bench
-	 write sync.Map cost = 1.263461937s
-	 read\write\delete sync.Map cost = 9.6866624s
-	 2021/03/09 20:10:08  sync.Map Pause:111403 1
-	 del sync.Map cost = 325.917375ms
+	 
+	 
+	 
 
 
