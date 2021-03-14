@@ -2,7 +2,7 @@
 A mem cache library by golang.
 
 # Why choose go-localcache ?
-1、Support to set TTL for every key 
+1、Support to set different TTL for every key 
 
 2、LRU policy to delete useless keys
 
