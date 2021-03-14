@@ -57,7 +57,7 @@ func testLocalCache() {
 	//读性能测试
 	startT := time.Now() //计算当前时间
 	var wg sync.WaitGroup
-	wg.Add(readTimes + 2)
+	wg.Add(readTimes)
 	for i := 0; i < readTimes; i++ {
 		go func() {
 			defer wg.Done()
@@ -71,13 +71,11 @@ func testLocalCache() {
 		}()
 	}
 	go func() {
-		defer wg.Done()
 		for i := 0; i < keys; i++ {
 			cache.Set(fmt.Sprintf("%s%d", kPre, i), []byte(strconv.Itoa(i)))
 		}
 	}()
 	go func() {
-		defer wg.Done()
 		for i := 0; i < keys; i++ {
 			cache.Del(fmt.Sprintf("%s%d", kPre, i))
 		}
@@ -108,7 +106,7 @@ func testSyncMap() {
 	//读性能测试
 	startT := time.Now() //计算当前时间
 	var wg sync.WaitGroup
-	wg.Add(readTimes + 2)
+	wg.Add(readTimes)
 	for i := 0; i < readTimes; i++ {
 		go func() {
 			defer wg.Done()
@@ -122,13 +120,11 @@ func testSyncMap() {
 		}()
 	}
 	go func() {
-		defer wg.Done()
 		for i := 0; i < keys; i++ {
 			cache.Store(fmt.Sprintf("%s%d", kPre, i), []byte(strconv.Itoa(i)))
 		}
 	}()
 	go func() {
-		defer wg.Done()
 		for i := 0; i < keys; i++ {
 			cache.Delete(fmt.Sprintf("%s%d", kPre, i))
 		}
