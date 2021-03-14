@@ -1,7 +1,9 @@
 # bench_test
 
+```
 1、write keys with 1 goroutine; 
 2、get keys with 100 goroutines while write keys with 1 goroutine and del keys with 1 goroutine;
+```
 
 
 # localcache
