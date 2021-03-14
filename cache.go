@@ -1,7 +1,6 @@
 package localcache
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -324,7 +323,7 @@ func (l *localCache) ttlProcess() {
 					}
 				}
 			}
-			fmt.Println(time.Now(), time.Now().Sub(ti), l.ttlDict.Len(), l.Len())
+			//fmt.Println(time.Now(), time.Now().Sub(ti), l.ttlDict.Len(), l.Len())
 		}
 	}
 }
