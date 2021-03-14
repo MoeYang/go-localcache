@@ -6,11 +6,11 @@ import (
 
 type policyLRU struct {
 	cap   int
-	cache Cache // the cache obj
+	cache *localCache // the cache obj
 	list  *list.List
 }
 
-func newPolicyLRU(cap int, cache Cache) policy {
+func newPolicyLRU(cap int, cache *localCache) policy {
 	return &policyLRU{
 		cap:   cap,
 		cache: cache,
@@ -27,7 +27,8 @@ func (p *policyLRU) add(obj interface{}) {
 	if p.list.Len() >= p.cap {
 		lastEle := p.list.Back()
 		if lastEle != nil {
-			p.cache.Del(lastEle.Value.(*element).key)
+			// del from cache
+			p.cache.del(lastEle.Value.(*element).key)
 		}
 	}
 	// push ele to first of list
