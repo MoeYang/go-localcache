@@ -67,7 +67,6 @@ func testLocalCache() {
 					//fmt.Println(j)
 				}
 			}
-
 		}()
 	}
 	go func() {

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/MoeYang/go-localcache/datastruct/dict"
-	"github.com/MoeYang/go-localcache/datastruct/lock"
 )
 
 const (
@@ -21,8 +20,6 @@ const (
 	hitChanLen = 1 << 15 // 32768
 	addChanLen = 1 << 15
 
-	defaultLockerCnt = 128 // lock shard count
-
 	opTypeDel = uint8(1)
 	opTypeAdd = uint8(2)
 )
@@ -34,8 +31,8 @@ type Cache interface {
 	Set(key string, value interface{})
 	// SetWithExpire set a key-value with seconds to live
 	SetWithExpire(key string, value interface{}, ttl int64)
-	// Del delete key and return if the key exists
-	Del(key string) bool
+	// Del delete key
+	Del(key string)
 	// Len return count of keys in cache
 	Len() int
 	// Flush clear all keys in chache, should do this when set and del is stop
@@ -47,9 +44,6 @@ type Cache interface {
 }
 
 type localCache struct {
-	// to make one key`s concurrent set and del safe by lock the key
-	locker *lock.Locker
-
 	// elimination policy of keys
 	policy     policy
 	policyType string
@@ -80,7 +74,6 @@ func NewLocalCache(options ...Option) Cache {
 		hitChan:  make(chan interface{}, hitChanLen),
 		opChan:   make(chan opMsg, addChanLen),
 		statist:  newstatisCaculator(false),
-		locker:   lock.NewLocker(defaultLockerCnt),
 	}
 	// set options
 	for _, opt := range options {
@@ -175,8 +168,6 @@ func (l *localCache) Set(key string, value interface{}) {
 }
 
 func (l *localCache) SetWithExpire(key string, value interface{}, ttl int64) {
-	l.locker.Lock(key)
-	defer l.locker.Unlock(key)
 	obj, has := l.dict.Get(key)
 	expireTime := time.Now().Add(time.Duration(ttl) * time.Second).Unix()
 	if has {
@@ -185,9 +176,9 @@ func (l *localCache) SetWithExpire(key string, value interface{}, ttl int64) {
 		element.lock.Lock()
 		element.value = value
 		element.expireTime = expireTime
-		element.lock.Unlock()
-		// set ttl
+		// set ttl surround by lock
 		l.ttlDict.Set(key, expireTime)
+		element.lock.Unlock()
 		// add hit count, if chan full, skip this signal is ok
 		select {
 		case l.hitChan <- obj:
@@ -199,30 +190,16 @@ func (l *localCache) SetWithExpire(key string, value interface{}, ttl int64) {
 			value:      value,
 			expireTime: expireTime,
 		}
-		// add new key
+		// add async by chan
 		obj = l.policy.pack(element)
-		l.dict.Set(key, obj)
-		// set ttl
-		l.ttlDict.Set(key, expireTime)
-		// add policy
-		l.opChan <- opMsg{opType: opTypeAdd, policyObj: obj}
+		l.opChan <- opMsg{opType: opTypeAdd, obj: obj}
 	}
 }
 
-// Del delete key and return if the key exists
-func (l *localCache) Del(key string) bool {
-	l.locker.Lock(key)
-	defer l.locker.Unlock(key)
-	obj, has := l.dict.Get(key)
-	if has {
-		// need del
-		l.dict.Del(key)
-		// del ttl
-		l.ttlDict.Del(key)
-		// del policy
-		l.opChan <- opMsg{opType: opTypeDel, policyObj: obj}
-	}
-	return has
+// Del delete key
+func (l *localCache) Del(key string) {
+	// del async by chan
+	l.opChan <- opMsg{opType: opTypeDel, obj: key}
 }
 
 // Len return count of keys in cache
@@ -273,14 +250,40 @@ func (l *localCache) cacheProcess() {
 			l.policy.hit(obj)
 		case opMsg := <-l.opChan:
 			if opMsg.opType == opTypeAdd {
-				l.policy.add(opMsg.policyObj)
+				l.set(opMsg.obj)
 			} else if opMsg.opType == opTypeDel {
-				l.policy.del(opMsg.policyObj)
+				l.del(opMsg.obj.(string))
 			}
 		case <-l.stopChan:
 			return
 		}
 	}
+}
+
+func (l *localCache) set(obj interface{}) {
+	ele := l.policy.unpack(obj)
+	objOld, has := l.dict.Get(ele.key)
+	if has { // exists, del objOld from lru list
+		l.policy.del(objOld)
+	}
+	l.dict.Set(ele.key, obj)
+	// set ttl
+	l.ttlDict.Set(ele.key, ele.expireTime)
+	// add policy
+	l.policy.add(obj)
+}
+
+func (l *localCache) del(key string) {
+	obj, has := l.dict.Get(key)
+	if !has {
+		return
+	}
+	// need del
+	l.dict.Del(key)
+	// del ttl
+	l.ttlDict.Del(key)
+	// del policy list
+	l.policy.del(obj)
 }
 
 // ttlProcess run a loop to delete the keys which are expired
@@ -334,6 +337,6 @@ func (e *element) isExpire() bool {
 
 // opMsg is a msg send to opChan when add or del a key
 type opMsg struct {
-	opType    uint8       // type: add || del
-	policyObj interface{} // object which save in shard
+	opType uint8       // type: add || del
+	obj    interface{} // policy`s obj when set || key string when del
 }

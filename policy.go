@@ -22,7 +22,7 @@ type policy interface {
 }
 
 // newPolicy return policy implement by type const
-func newPolicy(policyType string, cap int, cache Cache) policy {
+func newPolicy(policyType string, cap int, cache *localCache) policy {
 	var p policy
 	switch policyType {
 	case PolicyTypeLRU:
