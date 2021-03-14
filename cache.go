@@ -1,6 +1,7 @@
 package localcache
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -305,7 +306,13 @@ func (l *localCache) ttlProcess() {
 				delCount = 0
 				now := time.Now().Unix()
 				keys := l.dict.RandKeys(defaultTTLCheckCount)
+				distinctMap := make(map[string]struct{}, defaultTTLCheckCount)
 				for _, key := range keys {
+					if _, see := distinctMap[key]; see {
+						continue
+					}
+					// add distinct key in map because RandKeys may repeat
+					distinctMap[key] = struct{}{}
 					v, has := l.ttlDict.Get(key)
 					if has {
 						// key expired, del it from dict & ttl dict
@@ -317,7 +324,7 @@ func (l *localCache) ttlProcess() {
 					}
 				}
 			}
-			//fmt.Println(time.Now(), time.Now().Sub(ti), l.ttlDict.Len(), l.Len())
+			fmt.Println(time.Now(), time.Now().Sub(ti), l.ttlDict.Len(), l.Len())
 		}
 	}
 }
