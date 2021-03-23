@@ -21,7 +21,11 @@ A mem cache library by golang.
 	
 	// Get a key and return the value and if the key exists
 	cache.Get(key string) (interface{}, bool)
-	
+
+	// GetOrLoad get a key, while key not exists, call f() to load data, and will set the load data to cache.
+	// Load data process will called singleFlight called 
+	cache.GetOrLoad(key string, f LoadFunc) (interface{}, error)
+
 	// Set a key-value with default seconds to live
 	cache.Set(key string, value interface{})
 	
