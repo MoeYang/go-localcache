@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MoeYang/go-localcache/common"
 	"github.com/MoeYang/go-localcache/datastruct/dict"
 )
 
@@ -27,6 +28,8 @@ const (
 type Cache interface {
 	// Get a key and return the value and if the key exists
 	Get(key string) (interface{}, bool)
+	// GetOrLoad get a key, while not exists, call f() to load data
+	GetOrLoad(key string, f LoadFunc) (interface{}, error)
 	// Set a key-value with default seconds to live
 	Set(key string, value interface{})
 	// SetWithExpire set a key-value with seconds to live
@@ -42,6 +45,9 @@ type Cache interface {
 	// Statistic return cache Statistic {"hit":1, "miss":1, "hitRate":50.0}
 	Statistic() map[string]interface{}
 }
+
+// LoadFunc is called to load data from user storage
+type LoadFunc func() (interface{}, error)
 
 type localCache struct {
 	// elimination policy of keys
@@ -63,6 +69,9 @@ type localCache struct {
 
 	// cache statist
 	statist statist
+
+	// group singleFlight
+	group common.Group
 }
 
 // NewLocalCache return Cache obj with options
@@ -163,6 +172,15 @@ func (l *localCache) Get(key string) (interface{}, bool) {
 	return nil, false
 }
 
+func (l *localCache) GetOrLoad(key string, f LoadFunc) (interface{}, error) {
+	res, has := l.Get(key)
+	if has {
+		return res, nil
+	}
+	// key not exists, load and set cache
+	return l.load(key, f)
+}
+
 func (l *localCache) Set(key string, value interface{}) {
 	l.SetWithExpire(key, value, l.ttl)
 }
@@ -260,6 +278,21 @@ func (l *localCache) cacheProcess() {
 	}
 }
 
+// load use singleFlight to load and set cache
+func (l *localCache) load(key string, f LoadFunc) (interface{}, error) {
+	loadF := func() (interface{}, error) {
+		res, err := f()
+		// if no err, set k-v to cache
+		if err != nil {
+			l.Set(key, res)
+		}
+		return res, err
+	}
+	// use singleFlight to load and set cache
+	return l.group.Do(key, loadF)
+}
+
+// set called by single goroutine cacheProcess() to sync call
 func (l *localCache) set(obj interface{}) {
 	ele := l.policy.unpack(obj)
 	objOld, has := l.dict.Get(ele.key)
@@ -273,6 +306,7 @@ func (l *localCache) set(obj interface{}) {
 	l.policy.add(obj)
 }
 
+// del called by single goroutine cacheProcess() to sync call
 func (l *localCache) del(key string) {
 	obj, has := l.dict.Get(key)
 	if !has {
