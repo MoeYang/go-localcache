@@ -283,7 +283,7 @@ func (l *localCache) load(key string, f LoadFunc) (interface{}, error) {
 	loadF := func() (interface{}, error) {
 		res, err := f()
 		// if no err, set k-v to cache
-		if err != nil {
+		if err == nil {
 			l.Set(key, res)
 		}
 		return res, err
