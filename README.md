@@ -1,4 +1,3 @@
-# What is go-localcache ?
 A mem cache library by golang.
 
 # Why choose go-localcache ?
