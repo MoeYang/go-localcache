@@ -1,4 +1,4 @@
-A mem cache library by golang.
+A mem-cached library by golang.
 
 # Why choose go-localcache ?
 1、Support to set different TTL for every key 
